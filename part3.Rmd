@@ -1,0 +1,215 @@
+---
+output:
+  pdf_document:
+    latex_engine: xelatex
+
+---
+```{r, tidy=TRUE}
+#install.packages("car")
+library(patchwork)
+library(ggplot2)
+library(car)
+library(MASS)
+```
+
+```{r}
+#splict the data
+ameshousing <- read.csv("Ames_Housing_Data.csv")
+clean_ameshousing<- na.omit(ameshousing)
+write.csv(clean_ameshousing, file = "clean_ameshousing.csv", row.names = FALSE)
+clean_ameshousing$Overall.Qual <- as.factor(clean_ameshousing$Overall.Qual)
+```
+
+```{r, fig.height=16, fig.width=10}
+#check assumptions
+model1 <- lm(SalePrice ~ Overall.Qual + Heating.QC + Central.Air + Gr.Liv.Area + Total.Bsmt.SF, data = clean_ameshousing)
+
+png("Residual_Analysis_Plots.png", width = 3000, height = 2300, res = 300)
+
+par(mfrow = c(3, 3), mar = c(4, 4, 2, 1))
+
+fitted_values1 <- fitted(model1)
+residuals1 <- residuals(model1)
+
+plot(x = fitted_values1, y = residuals1, 
+     main = "Residual vs Fitted", 
+     ylab = "Residuals", xlab = "Fitted")
+
+boxplot(residuals1 ~ clean_ameshousing$Heating.QC, main = "Residual vs Heating",
+        ylab = "Residuals", xlab = "Heating", col = "lightblue")
+plot(residuals1 ~ clean_ameshousing$Overall.Qual, main = "Residual vs Overall Quality",
+     ylab = "Residuals", xlab = "Overall Quality", col = "lightblue")
+boxplot(residuals1 ~ clean_ameshousing$Central.Air, main = "Residual vs Central Air Conditioning",
+        ylab = "Residuals", xlab = "Central Air Conditioning", col = "lightblue")
+plot(residuals1 ~ clean_ameshousing$Gr.Liv.Area, 
+     main = "Residual vs Above Ground Living Area",
+     ylab = "Residuals", xlab = "Above Ground Living Area in square feet")
+plot(residuals1 ~ clean_ameshousing$Total.Bsmt.SF, 
+     main = "Residual vs Total Basement Area",
+     ylab = "Residuals", xlab = "Total square feet of Basement Area")
+qqnorm(residuals1, main = "Normal Q-Q Plot")
+qqline(residuals1, col = "blue")
+
+```
+
+```{r, fig.height=16, fig.width=10}
+png("Residual_Fitted_and_QQPlot.png", width = 3000, height = 1200, res = 300)
+par(mfrow = c(1, 2))
+fitted_values1 <- fitted(model1)
+residuals1 <- residuals(model1)
+
+plot(x = fitted_values1, y = residuals1, 
+     main = "Residual vs Fitted", 
+     ylab = "Residuals", xlab = "Fitted")
+qqnorm(residuals1, main = "Normal Q-Q Plot")
+qqline(residuals1, col = "blue")
+```
+
+```{r, fig.height=16, fig.width=10}
+library(MASS)
+# Perform Box-Cox transformation on model1
+boxcox_result <- boxcox(model1, lambda = seq(-2, 2, by = 0.1))
+# Extract the best lambda value
+best_lambda <- boxcox_result$x[which.max(boxcox_result$y)]
+cat("The best value of \\lambda is:", best_lambda, "\n")
+# Transform SalePrice based on the lambda value
+if (best_lambda > 0.95 && best_lambda < 1.05) {
+  cat("$\\lambda$ is close to 1, no transformation is needed for SalePrice.\n")
+  clean_ameshousingTransformed_SalePrice <- clean_ameshousing$SalePrice
+} else if (best_lambda > -0.05 && best_lambda < 0.05) {
+  cat("$\\lambda$ is close to 0, applying logarithmic transformation to SalePrice.\n")
+  clean_ameshousing$Transformed_SalePrice <- log(clean_ameshousing$SalePrice)
+} else {
+  cat("$\\lambda$ =", best_lambda, "applying Box-Cox transformation to SalePrice.\n")
+  clean_ameshousing$Transformed_SalePrice <- (clean_ameshousing$SalePrice^best_lambda - 1) / best_lambda
+} 
+#1/4 power transformation
+clean_ameshousing$power_SalePrice <- clean_ameshousing$SalePrice^(1/4)
+model1_power <- lm(power_SalePrice ~ Overall.Qual + Heating.QC + Central.Air + 
+                   Gr.Liv.Area + Total.Bsmt.SF, data = clean_ameshousing)
+# Calculate fitted values and residuals
+fitted_values_power <- fitted(model1_power)
+residuals_power <- residuals(model1_power)
+
+png("Trans_Residual_Analysis_Plots.png", width = 4000, height = 3100, res = 300)
+
+par(mfrow = c(3, 3), mar = c(4, 4, 2, 1))
+# Residual vs Fitted
+plot(x = fitted_values_power, y = residuals_power, 
+     main = "Residual vs Fitted (Transformed)", 
+     ylab = "Residuals", xlab = "Fitted")
+abline(h = 0, col = "red")
+
+# Residual vs Heating.QC
+boxplot(residuals_power ~ clean_ameshousing$Heating.QC, 
+        main = "Residual vs Heating (Transformed)",
+        ylab = "Residuals", xlab = "Heating", col = "lightblue")
+
+# Residual vs Overall.Qual
+plot(residuals_power ~ clean_ameshousing$Overall.Qual, 
+     main = "Residual vs Overall Quality (Transformed)", 
+     ylab = "Residuals", xlab = "Overall Quality", col = "lightblue")
+
+# Residual vs Central.Air
+boxplot(residuals_power ~ clean_ameshousing$Central.Air, 
+        main = "Residual vs Central Air Conditioning (Transformed)",
+        ylab = "Residuals", xlab = "Central Air Conditioning", col = "lightblue")
+
+# Residual vs Gr.Liv.Area (Quarter-Power Transformed)
+plot(residuals_power ~ clean_ameshousing$Gr.Liv.Area, 
+     main = "Residual vs Above Ground Living Area (Transformed)",
+     ylab = "Residuals", xlab = "Gr.Liv.Area")
+
+# Residual vs Total.Bsmt.SF (Power Transformed)
+plot(residuals_power ~ clean_ameshousing$Total.Bsmt.SF, 
+     main = "Residual vs Total Basement Area (Transformed)",
+     ylab = "Residuals", xlab = "Total.Bsmt.SF")
+
+# Normal Q-Q Plot
+qqnorm(residuals_power, main = "Normal Q-Q Plot (Transformed)")
+qqline(residuals_power, col = "blue")
+
+
+```
+```{r, fig.height=16, fig.width=10}
+png("TRans_Residual_Fitted_and_QQPlot.png", width = 3000, height = 1200, res = 300)
+par(mfrow = c(1, 2))
+
+plot(x = fitted_values_power, y = residuals_power, 
+     main = "Residual vs Fitted (Transformed)", 
+     ylab = "Residuals", xlab = "Fitted")
+abline(h = 0, col = "red")
+
+qqnorm(residuals_power, main = "Normal Q-Q Plot (Transformed)")
+qqline(residuals_power, col = "blue")
+```
+
+#Two Additonal Check of MLR
+```{r, fig.height=5, fig.width=5}
+# Conditional Mean Response
+plot(x = fitted_values_power, y = clean_ameshousing$power_SalePrice,
+     main = "Response vs Fitted",
+     xlab = "Fitted", ylab = "Sale Price")
+abline(a = 0, b = 1, lty = 2, col = "red")
+
+# Conditional Mean Predictors
+pairs(clean_ameshousing[, c("Gr.Liv.Area", "Total.Bsmt.SF")],
+      main = "Pairwise Scatterplots of Predictors",
+      pch = 8, col = "lightblue")
+```
+
+、
+
+
+
+
+
+
+```{r}
+#check multicollinearity
+library(car)
+vif(model1)
+vif(model1_power)
+```
+
+```{r}
+#conduct overall F-test for models and find the better model
+summary(model1_power)
+anova(model1_power)
+
+```
+
+```{r, echo=FALSE}
+# Compute leverage points
+h_ii <- hatvalues(model1_power)
+hcut <- 2 * (length(coefficients(model1_power)) + 1) / nrow(model1_power$model)  # Leverage cutoff
+num_leverage_points <- length(which(h_ii > hcut))
+cat("Number of leverage points:", num_leverage_points, "\n")
+
+# Compute standardized residuals (outliers)
+r_i <- rstandard(model1_power)
+num_outlier_points <- length(which(r_i > 4 | r_i < -4))  # Regression outliers
+cat("Number of outliers:", num_outlier_points, "\n")
+
+# Compute Cook's distance (influential points)
+D_i <- cooks.distance(model1_power)
+cookcut <- qf(0.5, df1 = length(coefficients(model1_power)), df2 = nrow(model1_power$model) - length(coefficients(model1_power)))
+num_influential_cooks <- length(which(D_i > cookcut))
+cat("Number of influential points by Cook's Distance:", num_influential_cooks, "\n")
+
+# Compute DFFITS
+dffits_i <- dffits(model1_power)
+fitcut <- 2 * sqrt((length(coefficients(model1_power)) + 1) / nrow(model1_power$model))  # DFFITS cutoff
+num_influential_dffits <- length(which(abs(dffits_i) > fitcut))
+cat("Number of influential points by DFFITS:", num_influential_dffits, "\n")
+
+# Compute DFBETAS
+dfbetas_i <- dfbetas(model1_power)
+betacut <- 2 / sqrt(nrow(model1_power$model))  # DFBETAS cutoff
+num_influential_dfbetas <- sapply(1:ncol(dfbetas_i), function(i) {
+  length(which(abs(dfbetas_i[, i]) > betacut))
+})
+cat("Number of influential points by DFBETAS (per coefficient):\n")
+print(num_influential_dfbetas)
+
+```
